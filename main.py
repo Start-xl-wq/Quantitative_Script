@@ -1,0 +1,85 @@
+"""
+入口：拉数据 → 评估 → 输出终端 + markdown 归档。
+
+用法：
+    .venv/bin/python main.py
+"""
+
+from __future__ import annotations
+
+import sys
+
+from rich.console import Console
+
+import config as C
+from advisor import evaluate
+from data import fetch_csindex_valuation, fetch_price
+from report import render_terminal, write_markdown
+
+
+def _normalize_target(tgt: dict) -> dict:
+    """允许 TARGETS 用新简写（{code, name?, valuation_csindex?}）
+    或老格式（{name, buy_code, price_source}）。统一返回新格式。"""
+    if "code" in tgt:
+        return {
+            "name": tgt.get("name") or tgt["code"],
+            "code": tgt["code"],
+            "valuation_csindex": tgt.get("valuation_csindex"),
+        }
+    # 兼容老格式
+    if "buy_code" in tgt and "price_source" in tgt:
+        # 老格式中 price_source 是 (src, code) 元组，主要做向后兼容
+        return {
+            "name": tgt.get("name") or tgt.get("buy_code") or "?",
+            "code": tgt["buy_code"],
+            "valuation_csindex": tgt.get("valuation_csindex"),
+            "_legacy_price_source": tgt["price_source"],
+        }
+    raise ValueError(f"无法识别的 TARGET 配置：{tgt!r}（需要至少包含 'code' 字段）")
+
+
+def main() -> int:
+    console = Console()
+    advices = []
+    valuations: dict[str, object] = {}
+
+    for raw in C.TARGETS:
+        tgt = _normalize_target(raw)
+        name = tgt["name"]
+        code = tgt["code"]
+
+        console.print(f"[dim]→ 拉取 {name} ({code}) ...[/dim]")
+        try:
+            if "_legacy_price_source" in tgt:
+                df = fetch_price(tgt["_legacy_price_source"])
+            else:
+                df = fetch_price(code)
+        except Exception as e:
+            console.print(f"[red]× {name} 拉数失败：{e}[/red]")
+            continue
+
+        try:
+            advice = evaluate(df, name, code)
+            advices.append(advice)
+        except Exception as e:
+            console.print(f"[red]× {name} 评估失败：{e}[/red]")
+            continue
+
+        val_code = tgt.get("valuation_csindex")
+        if val_code:
+            valuations[name] = fetch_csindex_valuation(val_code)
+
+    if not advices:
+        console.print("[red]没有任何标的可以评估，退出。[/red]")
+        return 1
+
+    console.print()
+    render_terminal(advices, valuations)
+
+    path = write_markdown(advices, valuations)
+    console.print(f"\n[green]✓ 报告已写入：{path}[/green]")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
