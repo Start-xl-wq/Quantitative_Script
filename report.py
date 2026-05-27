@@ -53,7 +53,7 @@ def render_terminal(advices: list[Advice], valuations: dict[str, pd.DataFrame | 
             a.buy_code,
             a.last_date.strftime("%Y-%m-%d"),
             f"{a.last_close:.4f}",
-            f"{a.score}/5",
+            f"{a.score}/{getattr(a, 'score_max', 100)}",
             f"[{color}]{a.label}[/{color}]",
             f"{a.multiplier:.1f}x",
             f"[{color}]{a.amount:.0f}[/{color}]",
@@ -68,11 +68,12 @@ def render_terminal(advices: list[Advice], valuations: dict[str, pd.DataFrame | 
         )
         sig_table.add_column("信号", style="bold")
         sig_table.add_column("触发", justify="center")
+        sig_table.add_column("得分", justify="right")
         sig_table.add_column("当前值")
         sig_table.add_column("阈值")
         for d in a.details:
             mark = "[green]✓[/green]" if d.triggered else "[dim]·[/dim]"
-            sig_table.add_row(d.name, mark, d.value, d.threshold)
+            sig_table.add_row(d.name, mark, f"{getattr(d, 'points', 0):.1f}", d.value, d.threshold)
         console.print(sig_table)
 
         # 估值（仅展示）
@@ -112,7 +113,7 @@ def write_markdown(
         lines.append(
             f"| {a.target_name} | `{a.buy_code}` | "
             f"{a.last_date.strftime('%Y-%m-%d')} | "
-            f"{a.last_close:.4f} | {a.score}/5 | "
+            f"{a.last_close:.4f} | {a.score}/{getattr(a, 'score_max', 100)} | "
             f"**{a.label}** | {a.multiplier:.1f}x | "
             f"**{a.amount:.0f}** |"
         )
@@ -121,26 +122,28 @@ def write_markdown(
         lines.append(f"\n---\n\n## {a.target_name}（{a.buy_code}）\n")
         lines.append(f"- 数据日期：{a.last_date.strftime('%Y-%m-%d')}")
         lines.append(f"- 收盘/净值：**{a.last_close:.4f}**")
-        lines.append(f"- 综合得分：**{a.score}/5**")
+        lines.append(f"- 综合得分：**{a.score}/{getattr(a, 'score_max', 100)}**")
         lines.append(f"- 建议：**{a.label}**（{a.multiplier:.1f}x，金额 {a.amount:.0f} 元）")
         if a.circuit_breaker:
             lines.append("- ⚠️ 触发熔断：趋势空头 + 短期超买，强制暂缓。")
 
         lines.append("\n### 信号明细\n")
-        lines.append("| 信号 | 触发 | 当前值 | 阈值 |")
-        lines.append("|---|:---:|---|---|")
+        lines.append("| 信号 | 触发 | 得分 | 当前值 | 阈值 |")
+        lines.append("|---|:---:|---:|---|---|")
         for d in a.details:
             mark = "✅" if d.triggered else "·"
-            lines.append(f"| {d.name} | {mark} | {d.value} | {d.threshold} |")
+            lines.append(f"| {d.name} | {mark} | {getattr(d, 'points', 0):.1f} | {d.value} | {d.threshold} |")
 
         # 关键指标
         lines.append("\n### 关键指标\n")
         m = a.metrics
         lines.append(
             f"- MA200：{m['MA200']:.4f}\n"
+            f"- MA200 偏离：{m.get('MA200偏离', 0)*100:.2f}%\n"
             f"- RSI(14)：{m['RSI14']:.2f}\n"
             f"- 近 1 年价格分位：{m['1Y分位']*100:.1f}%\n"
             f"- 距 60 日高点回撤：{m['60日回撤']*100:.2f}%\n"
+            f"- 布林位置：{m.get('布林位置', 0):.2f}\n"
             f"- 布林下轨 / 上轨：{m['布林下轨']:.4f} / {m['布林上轨']:.4f}"
         )
 
