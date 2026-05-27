@@ -23,6 +23,7 @@ TARGETS = [
     {"name": "中证A500", "code": "022430", "valuation_csindex": "000510"},
     {"name": "红利低波(50)", "code": "007466", "valuation_csindex": "H30269"},
     {"name": "红利低波100 ETF", "code": "159307", "valuation_csindex": "930955"},
+    {"code": "006195"}, 
 ]
 
 # ----------------------- 定投金额 -----------------------

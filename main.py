@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 
 from rich.console import Console
@@ -17,12 +18,33 @@ from data import fetch_csindex_valuation, fetch_price
 from report import render_terminal, write_markdown
 
 
+def _fetch_name(code: str) -> str | None:
+    """尝试通过 akshare 自动获取基金/ETF 的名称。失败返回 None。"""
+    try:
+        import akshare as ak
+
+        code = code.strip()
+        # 纯 6 位数字 → 尝试雪球基金信息接口
+        if re.fullmatch(r"\d{6}", code):
+            df = ak.fund_individual_basic_info_xq(symbol=code)
+            row = df[df["item"] == "基金名称"]
+            if not row.empty:
+                return str(row["value"].values[0]).strip()
+    except Exception:
+        pass
+    return None
+
+
 def _normalize_target(tgt: dict) -> dict:
     """允许 TARGETS 用新简写（{code, name?, valuation_csindex?}）
-    或老格式（{name, buy_code, price_source}）。统一返回新格式。"""
+    或老格式（{name, buy_code, price_source}）。统一返回新格式。
+    当 name 未填写时，自动从网络查询真实基金/ETF 名称。"""
     if "code" in tgt:
+        name = tgt.get("name")
+        if not name:
+            name = _fetch_name(tgt["code"]) or tgt["code"]
         return {
-            "name": tgt.get("name") or tgt["code"],
+            "name": name,
             "code": tgt["code"],
             "valuation_csindex": tgt.get("valuation_csindex"),
         }
